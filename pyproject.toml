@@ -1,22 +1,36 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "owl-py"
-version = "0.1.0"
+name = "owl-crypto-py"
+version = "1.0.2" 
 description = "Python implementation of the OWL aPAKE protocol"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
-  { name = "Nicolò Marotta", email = "nick007sbt@gmail.com" }
+    { name = "Nicolò Marotta", email = "nick007sbt@gmail.com" }
 ]
 dependencies = [
-  "cryptography>=42.0.0",
+    "cryptography>=42.0.0",
 ]
 requires-python = ">=3.10"
 classifiers = [
-  "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: MIT License",
-  "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Security :: Cryptography",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
 ]
+keywords = ["cryptography", "pake", "apake", "authentication", "owl", "password"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["owl_crypto_py"]
+
+[tool.setuptools.package-data]
+owl_crypto_py = ["py.typed"]

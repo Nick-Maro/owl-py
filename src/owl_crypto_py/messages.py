@@ -5,7 +5,7 @@ import json
 from typing import Union, Any, Dict
 from dataclasses import dataclass
 
-from owl_common import Config, Curves, Point, ZKP
+from .owl_common import Config, Curves, Point, ZKP
 
 
 def get_curve(curve: Curves):

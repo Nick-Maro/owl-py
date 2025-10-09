@@ -2,12 +2,12 @@ import hashlib
 from typing import Union, Dict, Any
 from dataclasses import dataclass
 
-from owl_common import (
+from .owl_common import (
     OwlCommon,
     ZKPVerificationFailure,
     AuthenticationFailure,
 )
-from messages import (
+from .messages import (
     AuthFinishRequest,
     AuthInitRequest,
     AuthInitResponse,

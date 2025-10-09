@@ -4,10 +4,10 @@ from typing import Optional, Union, Tuple
 from dataclasses import dataclass
 
 
-from owl_common import OwlCommon, Point, ZKP, ZKPVerificationFailure
+from .owl_common import OwlCommon, Point, ZKP, ZKPVerificationFailure
 
 
-from messages import (
+from .messages import (
     AuthFinishRequest,
     AuthInitRequest,
     AuthInitResponse,
