@@ -1,0 +1,146 @@
+name: Auto Bump Version & Publish to PyPI
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  bump-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Get current version
+        id: get_version
+        run: |
+          if [ -f pyproject.toml ]; then
+            VERSION=$(grep '^version' pyproject.toml | head -1 | cut -d '"' -f2)
+          elif [ -f setup.py ]; then
+            VERSION=$(python setup.py --version)
+          else
+            echo "Nessun file di versione trovato"
+            exit 1
+          fi
+          echo "current_version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Bump patch version
+        id: bump
+        run: |
+          old=${{ steps.get_version.outputs.current_version }}
+          IFS='.' read -r major minor patch <<< "$old"
+          new="$major.$minor.$((patch + 1))"
+          echo "new_version=$new" >> $GITHUB_OUTPUT
+          echo "Bumping version from $old to $new"
+
+      - name: Update version in pyproject.toml
+        if: ${{ hashFiles('pyproject.toml') != '' }}
+        run: |
+          sed -i "s/^version = .*/version = \"${{ steps.bump.outputs.new_version }}\"/" pyproject.toml
+          echo "Updated pyproject.toml"
+          cat pyproject.toml | grep "^version"
+
+      - name: Update version in setup.py
+        if: ${{ hashFiles('setup.py') != '' }}
+        run: |
+          sed -i "s/version=['\"][0-9.]*['\"]/version='${{ steps.bump.outputs.new_version }}'/" setup.py
+          echo "Updated setup.py"
+          grep "version=" setup.py || true
+
+      - name: Pull latest changes
+        run: |
+          git pull --rebase origin main || true
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "🔼 Bump version to ${{ steps.bump.outputs.new_version }}" || echo "No changes to commit"
+
+      - name: Create and push tag
+        run: |
+          TAG="v${{ steps.bump.outputs.new_version }}"
+          
+          # Rimuovi tag locale se esiste
+          git tag -d "$TAG" 2>/dev/null || true
+          
+          # Rimuovi tag remoto se esiste
+          git push origin ":refs/tags/$TAG" 2>/dev/null || true
+          
+          # Crea nuovo tag
+          git tag "$TAG"
+          
+          # Push con retry
+          for i in {1..3}; do
+            if git push origin main --tags; then
+              echo "Push successful"
+              break
+            else
+              echo "Push failed, attempt $i/3"
+              sleep 2
+              git pull --rebase origin main || true
+            fi
+          done
+
+      - name: Verify version was updated
+        run: |
+          if [ -f pyproject.toml ]; then
+            BUILT_VERSION=$(grep '^version' pyproject.toml | head -1 | cut -d '"' -f2)
+          elif [ -f setup.py ]; then
+            BUILT_VERSION=$(python setup.py --version)
+          fi
+          echo "Building version: $BUILT_VERSION"
+          if [ "$BUILT_VERSION" != "${{ steps.bump.outputs.new_version }}" ]; then
+            echo "ERROR: Version mismatch!"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build package
+        run: |
+          echo "Building package with version ${{ steps.bump.outputs.new_version }}"
+          python -m build
+          ls -lh dist/
+
+      - name: Check if version exists on PyPI
+        id: check_pypi
+        run: |
+          VERSION="${{ steps.bump.outputs.new_version }}"
+          if pip index versions owl_crypto_py | grep -q "$VERSION"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Version $VERSION already exists on PyPI"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Version $VERSION is new, can publish"
+          fi
+
+      - name: Publish to PyPI
+        if: steps.check_pypi.outputs.exists == 'false'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          echo "Publishing version ${{ steps.bump.outputs.new_version }} to PyPI"
+          python -m twine upload dist/* --verbose
+
+      - name: Skip publish (version exists)
+        if: steps.check_pypi.outputs.exists == 'true'
+        run: |
+          echo "⚠️ Version ${{ steps.bump.outputs.new_version }} already exists on PyPI, skipping publish"
