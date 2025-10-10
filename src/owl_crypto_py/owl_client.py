@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from .owl_common import OwlCommon, ZKP, Point, ZKPVerificationFailure
 from .extended_curves import FourQPoint
 
-from messages import (
+from .messages import (
     AuthFinishRequest,
     AuthInitRequest,
     AuthInitResponse,
