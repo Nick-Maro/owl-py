@@ -9,10 +9,11 @@ from dataclasses import dataclass
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
+#FourQ
+from .extended_curves import FourQPoint, rand_scalar_fourq
 
 
 class Point:
-    
     
     def __init__(self, x: int, y: int, curve, is_infinity=False):
         self.x = x
@@ -22,12 +23,10 @@ class Point:
     
     @classmethod
     def infinity(cls, curve):
-        
         return cls(0, 0, curve, is_infinity=True)
     
     @classmethod
     def from_hex(cls, hex_str: str, curve):
-        
         try:
             data = bytes.fromhex(hex_str)
             
@@ -52,7 +51,6 @@ class Point:
             raise ValueError(f"Unable to decode point: {e}")
     
     def to_hex(self) -> str:
-        
         if self.is_infinity:
             return "00"
         
@@ -70,11 +68,9 @@ class Point:
         return '04' + x_bytes.hex() + y_bytes.hex()
     
     def toRawBytes(self) -> bytes:
-       
         return bytes.fromhex(self.to_hex())
     
     def multiply(self, scalar: int) -> 'Point':
-        
         if self.is_infinity or scalar == 0:
             return Point.infinity(self.curve)
         
@@ -90,7 +86,6 @@ class Point:
         return result
     
     def add(self, other: 'Point') -> 'Point':
-        
         if self.is_infinity:
             return other
         if other.is_infinity:
@@ -105,28 +100,23 @@ class Point:
                 return Point.infinity(self.curve)
         
         s = ((other.y - self.y) * pow(other.x - self.x, -1, p)) % p
-        
         x3 = (s * s - self.x - other.x) % p
         y3 = (s * (self.x - x3) - self.y) % p
         
         return Point(x3, y3, self.curve)
     
     def double(self) -> 'Point':
-        
         if self.is_infinity:
             return self
         
         p, a = self._get_curve_params()
-        
         s = ((3 * self.x * self.x + a) * pow(2 * self.y, -1, p)) % p
-        
         x3 = (s * s - 2 * self.x) % p
         y3 = (s * (self.x - x3) - self.y) % p
         
         return Point(x3, y3, self.curve)
     
     def subtract(self, other: 'Point') -> 'Point':
-        
         if other.is_infinity:
             return self
         
@@ -135,7 +125,6 @@ class Point:
         return self.add(neg_other)
     
     def equals(self, other: 'Point') -> bool:
-        
         if self.is_infinity and other.is_infinity:
             return True
         if self.is_infinity or other.is_infinity:
@@ -143,12 +132,10 @@ class Point:
         return self.x == other.x and self.y == other.y
     
     def assertValidity(self):
-        
         if self.is_infinity:
             return
         
         p, a, b = self._get_curve_params_full()
-        
         left = (self.y * self.y) % p
         right = (self.x * self.x * self.x + a * self.x + b) % p
         
@@ -216,6 +203,7 @@ class Curves(Enum):
     P256 = 256
     P384 = 384
     P521 = 521
+    FOURQ = 4  
 
 
 @dataclass
@@ -234,20 +222,29 @@ class OwlCommon(ABC):
             self.n = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
             Gx = 0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296
             Gy = 0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5
+            self.G = Point(Gx, Gy, self.curve_obj)
+            
         elif curve == Curves.P384:
             self.curve_obj = ec.SECP384R1()
             self.n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFC7634D81F4372DDF581A0DB248B0A77AECEC196ACCC52973
             Gx = 0xAA87CA22BE8B05378EB1C71EF320AD746E1D3B628BA79B9859F741E082542A385502F25DBF55296C3A545E3872760AB7
             Gy = 0x3617DE4A96262C6F5D9E98BF9292DC29F8F41DBD289A147CE9DA3113B5F0B8C00A60B1CE1D7E819D7A431D7C90EA0E5F
+            self.G = Point(Gx, Gy, self.curve_obj)
+            
         elif curve == Curves.P521:
             self.curve_obj = ec.SECP521R1()
             self.n = 0x01FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFA51868783BF2F966B7FCC0148F709A5D03BB5C9B8899C47AEBB6FB71E91386409
             Gx = 0x00C6858E06B70404E9CD9E3ECB662395B4429C648139053FB521F828AF606B4D3DBAA14B5E77EFE75928FE1DC127A2FFA8DE3348B3C1856A429BF97E7E31C2E5BD66
             Gy = 0x011839296A789A3BC0045C8A5FB42C7D1BD998F54449579B446817AFBD17273E662C97EE72995EF42640C550B9013FAD0761353C7086A272C24088BE94769FD16650
+            self.G = Point(Gx, Gy, self.curve_obj)
+            
+        elif curve == Curves.FOURQ:
+            self.curve_obj = None
+            self.n = FourQPoint.N
+            self.G = FourQPoint.generator()
+            
         else:
             raise ValueError(f"Unsupported curve: {curve}")
-        
-        self.G = Point(Gx, Gy, self.curve_obj)
     
     def modN(self, x: int) -> int:
         return ((x % self.n) + self.n) % self.n
@@ -259,7 +256,7 @@ class OwlCommon(ABC):
         rand_val = int.from_bytes(rand_bytes, byteorder='big')
         return from_val + (rand_val % (range_val + 1))
     
-    def concatToBytes(self, *args: Union[bytes, str, int, Point]) -> bytes:
+    def concatToBytes(self, *args: Union[bytes, str, int, Point, FourQPoint]) -> bytes:
         result = b''
         for arg in args:
             if isinstance(arg, bytes):
@@ -271,26 +268,26 @@ class OwlCommon(ABC):
                 if byte_length == 0:
                     byte_length = 1
                 result += arg.to_bytes(byte_length, byteorder='big')
-            elif isinstance(arg, Point):
+            elif hasattr(arg, 'toRawBytes'):  # Point or FourQPoint
                 result += arg.toRawBytes()
             else:
                 raise TypeError("Unsupported type in concatToBytes")
         return result
     
-    async def H(self, *args: Union[bytes, str, int, Point]) -> int:
+    async def H(self, *args: Union[bytes, str, int, Point, FourQPoint]) -> int:
         bytes_data = self.concatToBytes(*args)
         hash_result = hashlib.sha256(bytes_data).digest()
         return int.from_bytes(hash_result, byteorder='big')
     
     async def HMAC(
         self,
-        K: Point,
+        K: Union[Point, FourQPoint],
         senderId: str,
         receiverId: str,
-        sender1: Point,
-        sender2: Point,
-        receiver1: Point,
-        receiver2: Point,
+        sender1: Union[Point, FourQPoint],
+        sender2: Union[Point, FourQPoint],
+        receiver1: Union[Point, FourQPoint],
+        receiver2: Union[Point, FourQPoint],
     ) -> str:
         kc_key = hashlib.sha256(self.concatToBytes(K, "KC")).digest()
         
@@ -307,19 +304,25 @@ class OwlCommon(ABC):
         hmac_result = hmac.new(kc_key, bytes_data, hashlib.sha256).digest()
         return hmac_result.hex()
     
-    async def createZKP(self, x: int, G: Point, X: Point, prover: str) -> ZKP:
-        v = self.rand(1, self.n - 1)
+    async def createZKP(self, x: int, G: Union[Point, FourQPoint], X: Union[Point, FourQPoint], prover: str) -> ZKP:
+        
+        if isinstance(G, FourQPoint):
+            v = rand_scalar_fourq()
+        else:
+            v = self.rand(1, self.n - 1)
+        
         V = G.multiply(v)
         h = await self.H(G, V, X, prover)
         r = self.modN(v - x * h)
         return ZKP(h=h, r=r)
     
-    async def verifyZKP(self, zkp: ZKP, G: Point, X: Point, prover: str) -> bool:
+    async def verifyZKP(self, zkp: ZKP, G: Union[Point, FourQPoint], X: Union[Point, FourQPoint], prover: str) -> bool:
         h = zkp.h
         r = zkp.r
         
         try:
-            X.assertValidity()
+            if hasattr(X, 'assertValidity'):
+                X.assertValidity()
         except Exception:
             return False
         

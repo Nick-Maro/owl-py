@@ -63,12 +63,20 @@ import json
 from typing import Union, Any, Dict
 from dataclasses import dataclass
 
-from .owl_common import Config, Curves, Point, ZKP
+from owl_common import Config, Curves, Point, ZKP
+from extended_curves import FourQPoint
 
 
 def get_curve(curve: Curves):
-    """Gets the appropriate curve object"""
-    raise NotImplementedError
+    
+    from cryptography.hazmat.primitives.asymmetric import ec
+    
+    curve_map = {
+        Curves.P256: ec.SECP256R1(),
+        Curves.P384: ec.SECP384R1(),
+        Curves.P521: ec.SECP521R1(),
+    }
+    return curve_map.get(curve)
 
 
 def parse_num(x: Any) -> Union[int, None]:
@@ -83,10 +91,16 @@ def parse_num(x: Any) -> Union[int, None]:
         return None
 
 
-def parse_point(x: Any, curve: Curves) -> Union[Point, None]:
-    """Parse a Point from hex string"""
+def parse_point(x: Any, curve: Curves) -> Union[Point, FourQPoint, None]:
+    
     try:
-        return Point.from_hex(x, curve)
+        if curve == Curves.FOURQ:
+            return FourQPoint.from_hex(x)
+        else:
+            curve_obj = get_curve(curve)
+            if curve_obj is None:
+                return None
+            return Point.from_hex(x, curve_obj)
     except Exception:
         return None
 
@@ -118,7 +132,11 @@ class DeserializationError(Exception):
         template += f"class {cls_name}:\n"
         
         for attr, attr_type in attrs.items():
-            template += indent(f"{attr}: {attr_type}\n", 1)
+            
+            if attr_type == "Point":
+                template += indent(f"{attr}: Union[Point, FourQPoint]\n", 1)
+            else:
+                template += indent(f"{attr}: {attr_type}\n", 1)
         
         template += "\n"
         
@@ -208,4 +226,3 @@ if __name__ == "__main__":
     with open("messages.py", "w", encoding="utf-8") as f:
         f.write(content)
     
-    print("messages.py generated successfully")

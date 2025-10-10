@@ -1,13 +1,12 @@
 import hashlib
 import hmac
-from typing import Optional, Union, Tuple
+from typing import Optional, Union
 from dataclasses import dataclass
 
+from .owl_common import OwlCommon, ZKP, Point, ZKPVerificationFailure
+from .extended_curves import FourQPoint
 
-from .owl_common import OwlCommon, Point, ZKP, ZKPVerificationFailure
-
-
-from .messages import (
+from messages import (
     AuthFinishRequest,
     AuthInitRequest,
     AuthInitResponse,
@@ -22,8 +21,8 @@ class ClientInitVals:
     pi: int
     x1: int
     x2: int
-    X1: Point
-    X2: Point
+    X1: Union[Point, FourQPoint]
+    X2: Union[Point, FourQPoint]
     PI1: ZKP
     PI2: ZKP
 

@@ -3,15 +3,15 @@
 import asyncio
 from typing import Optional
 
-from .owl_client import OwlClient, UninitialisedClientError
-from .owl_server import OwlServer
-from .owl_common import (
+from owl_crypto_py.owl_client import OwlClient, UninitialisedClientError
+from owl_crypto_py.owl_server import OwlServer
+from owl_crypto_py.owl_common import (
     Config,
     Curves,
     ZKPVerificationFailure,
     AuthenticationFailure,
 )
-from .messages import (
+from owl_crypto_py.messages import (
     RegistrationRequest,
     UserCredentials,
     AuthInitRequest,
