@@ -1,6 +1,6 @@
 import hashlib
 import hmac
-from typing import Optional, Union
+from typing import Optional, Union, Callable, Awaitable
 from dataclasses import dataclass
 
 from .owl_common import OwlCommon, ZKP, Point, ZKPVerificationFailure
@@ -39,6 +39,14 @@ class AuthFinishResult:
     key: bytes
     kc: str
     kcTest: str
+
+
+@dataclass
+class LoginResult:
+    
+    success: bool
+    key: Optional[bytes] = None
+    error: Optional[str] = None
 
 
 class OwlClient(OwlCommon):
@@ -167,3 +175,46 @@ class OwlClient(OwlCommon):
             kc=kc,
             kcTest=kcTest,
         )
+
+    # Simplified wrapper method
+    async def login(
+        self,
+        username: str,
+        password: str,
+        send_init: Callable[[str], Awaitable[Optional[str]]],
+        send_finish: Callable[[str], Awaitable[Optional[str]]]
+    ) -> LoginResult:
+        try:
+            
+            auth_init_request = await self.authInit(username, password)
+            init_json = auth_init_request.to_json()
+            
+            
+            response_json = await send_init(init_json)
+            if not response_json:
+                return LoginResult(success=False, error="Failed to receive server response")
+            
+            
+            auth_init_response = AuthInitResponse.deserialize(response_json, self.config)
+            if hasattr(auth_init_response, '__class__') and auth_init_response.__class__.__name__ == 'DeserializationError':
+                return LoginResult(success=False, error="Failed to deserialize server response")
+            
+           
+            finish_result = await self.authFinish(auth_init_response)
+            
+            if isinstance(finish_result, ZKPVerificationFailure):
+                return LoginResult(success=False, error="Server proof verification failed")
+            if isinstance(finish_result, UninitialisedClientError):
+                return LoginResult(success=False, error="Internal error: authInit not called")
+            
+            
+            finish_json = finish_result.finishRequest.to_json()
+            finish_response = await send_finish(finish_json)
+            
+            if not finish_response:
+                return LoginResult(success=False, error="Server rejected authentication")
+            
+            return LoginResult(success=True, key=finish_result.key)
+            
+        except Exception as e:
+            return LoginResult(success=False, error=f"Unexpected error: {str(e)}")

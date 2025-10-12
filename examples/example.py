@@ -54,7 +54,7 @@ async def main():
     password = "password123"
     
     print("PHASE 1: REGISTRATION")
-    print("-" * 60)
+
     
     print(f" Client: Creating registration request for '{username}'...")
     registration_request = await client.register(username, password)
@@ -68,7 +68,7 @@ async def main():
     print()
     
     print("SERIALIZATION (Optional)")
-    print("-" * 60)
+
     credentials_json = credentials.to_json()
     print(f" Serialized credentials: {credentials_json[:100]}...")
     
@@ -80,7 +80,7 @@ async def main():
     print()
     
     print("PHASE 2: AUTHENTICATION")
-    print("-" * 60)
+
     
     print(f" Client: Initializing authentication for '{username}'...")
     auth_init_request = await client.authInit(username, password)
@@ -156,14 +156,14 @@ async def main():
     print(f" Key Confirmation matches: {' YES' if kc_match else ' NO'}")
     
     if keys_match and kc_match:
-        print()
+
 
         print(" AUTHENTICATION COMPLETED SUCCESSFULLY")
 
         print(f"\nShared key established between client and server:")
         print(f"  {client_key.hex()}")
     else:
-        print()
+
         print(" Authentication failed: keys do not match")
 
 
@@ -173,7 +173,6 @@ async def test_wrong_password():
 
     print("TEST: AUTHENTICATION WITH WRONG PASSWORD")
 
-    print()
     
     config = Config(curve=Curves.P256, serverId="server.example.com")
     client = OwlClient(config)

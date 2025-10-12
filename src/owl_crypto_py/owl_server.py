@@ -1,5 +1,5 @@
 import hashlib
-from typing import Union
+from typing import Union, Callable, Awaitable, Optional
 from dataclasses import dataclass
 
 from .owl_common import (
@@ -28,6 +28,15 @@ class AuthFinishResult:
     key: bytes
     kc: str
     kcTest: str
+
+
+@dataclass
+class HandleAuthResult:
+    
+    success: bool
+    key: Optional[bytes] = None
+    response_json: Optional[str] = None
+    error: Optional[str] = None
 
 
 class OwlServer(OwlCommon):
@@ -139,3 +148,96 @@ class OwlServer(OwlCommon):
         kcTest = await self.HMAC(K, username, self.serverId, X1, X2, X3, X4)
         
         return AuthFinishResult(key=k, kc=kc, kcTest=kcTest)
+
+    # Simplified wrapper methods
+    async def handleAuth(
+        self,
+        username: str,
+        init_request_json: str,
+        finish_request_json: str,
+        get_credentials: Callable[[str], Awaitable[Optional[str]]],
+        store_session: Callable[[str, str], Awaitable[bool]],
+        get_session: Callable[[str], Awaitable[Optional[str]]]
+    ) -> HandleAuthResult:
+
+        try:
+            
+            auth_init_request = AuthInitRequest.deserialize(init_request_json, self.config)
+            if hasattr(auth_init_request, '__class__') and auth_init_request.__class__.__name__ == 'DeserializationError':
+                return HandleAuthResult(success=False, error="Failed to deserialize init request")
+            
+            
+            credentials_json = await get_credentials(username)
+            if not credentials_json:
+                return HandleAuthResult(success=False, error="User not found")
+            
+            credentials = UserCredentials.deserialize(credentials_json, self.config)
+            if hasattr(credentials, '__class__') and credentials.__class__.__name__ == 'DeserializationError':
+                return HandleAuthResult(success=False, error="Failed to deserialize credentials")
+            
+            
+            init_result = await self.authInit(username, auth_init_request, credentials)
+            if isinstance(init_result, ZKPVerificationFailure):
+                return HandleAuthResult(success=False, error="Client proof verification failed")
+            
+            
+            session_id = username
+            session_json = init_result.initial.to_json()
+            if not await store_session(session_id, session_json):
+                return HandleAuthResult(success=False, error="Failed to store session")
+            
+            response_json = init_result.response.to_json()
+            
+            
+            auth_finish_request = AuthFinishRequest.deserialize(finish_request_json, self.config)
+            if hasattr(auth_finish_request, '__class__') and auth_finish_request.__class__.__name__ == 'DeserializationError':
+                return HandleAuthResult(success=False, error="Failed to deserialize finish request")
+            
+            
+            initial_json = await get_session(session_id)
+            if not initial_json:
+                return HandleAuthResult(success=False, error="Session not found or expired")
+            
+            initial_values = AuthInitialValues.deserialize(initial_json, self.config)
+            if hasattr(initial_values, '__class__') and initial_values.__class__.__name__ == 'DeserializationError':
+                return HandleAuthResult(success=False, error="Failed to deserialize session")
+            
+           
+            finish_result = await self.authFinish(username, auth_finish_request, initial_values)
+            
+            if isinstance(finish_result, ZKPVerificationFailure):
+                return HandleAuthResult(success=False, error="Client proof verification failed")
+            if isinstance(finish_result, AuthenticationFailure):
+                return HandleAuthResult(success=False, error="Invalid credentials")
+            
+            return HandleAuthResult(
+                success=True, 
+                key=finish_result.key,
+                response_json=response_json
+            )
+            
+        except Exception as e:
+            return HandleAuthResult(success=False, error=f"Unexpected error: {str(e)}")
+    
+    async def handleRegister(
+        self,
+        request_json: str,
+        store_credentials: Callable[[str, str], Awaitable[bool]]
+    ) -> HandleAuthResult:
+
+        try:
+            
+            reg_request = RegistrationRequest.deserialize(request_json, self.config)
+            if hasattr(reg_request, '__class__') and reg_request.__class__.__name__ == 'DeserializationError':
+                return HandleAuthResult(success=False, error="Failed to deserialize request")
+            
+            
+            credentials = await self.register(reg_request)
+            
+           
+            credentials_json = credentials.to_json()
+            
+            return HandleAuthResult(success=True, response_json=credentials_json)
+            
+        except Exception as e:
+            return HandleAuthResult(success=False, error=f"Unexpected error: {str(e)}")
