@@ -50,9 +50,10 @@ class LoginResult:
 
 
 class OwlClient(OwlCommon):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, config, *args, **kwargs):
+        super().__init__(config, *args, **kwargs)
         self.initValues: Optional[ClientInitVals] = None
+        self._config = config
 
     async def register(
         self, username: str, password: str
@@ -195,7 +196,7 @@ class OwlClient(OwlCommon):
                 return LoginResult(success=False, error="Failed to receive server response")
             
             
-            auth_init_response = AuthInitResponse.deserialize(response_json, self.config)
+            auth_init_response = AuthInitResponse.deserialize(response_json, self._config)
             if hasattr(auth_init_response, '__class__') and auth_init_response.__class__.__name__ == 'DeserializationError':
                 return LoginResult(success=False, error="Failed to deserialize server response")
             
