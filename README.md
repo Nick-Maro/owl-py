@@ -30,13 +30,67 @@ pip install cryptography
 - **Zero-Knowledge Proofs**: Password is never transmitted or revealed
 - **Server Compromise Resistance**: Even if the server is compromised, passwords remain secure
 - **Forward Secrecy**: Session keys cannot be recovered even if passwords are later compromised
-- **Standard Elliptic Curves**: Support for P-256, P-384, P-521
+- **Elliptic Curves**: Supports P-256, P-384, P-521, and FourQ (experimental). Implementation of Curve25519 is in progress. could work on secp256k1 too
+
+## Why Owl?
+
+### Advantages over OPAQUE
+
+Owl offers several practical improvements over OPAQUE:
+
+1. **Simpler Implementation Without Hash-to-Curve**
+   - OPAQUE needs a constant-time hash-to-curve function that's difficult to implement correctly
+   - This requirement makes OPAQUE undefined for multiplicative groups
+   - Owl works with standard elliptic curve operations and hash functions you already have
+
+2. **Better Privacy for Password Changes**
+   - OPAQUE sends a pre-computed ciphertext that changes whenever you update your password
+   - Attackers monitoring login sessions can spot who hasn't changed their password and target them first
+   - Owl doesn't leak this information
+
+3. **Works Reliably in DSA Groups**
+   - OPAQUE can produce invalid outputs when used with DSA groups
+   - Owl handles these cases properly
+
+4. **Use Any Elliptic Curve**
+   - Owl works with any cryptographically suitable elliptic curve
+   - OPAQUE only works where a correct hash-to-curve function exists
+
+5. **Faster Registration**
+   - Owl needs just one message exchange for registration
+   - Other protocols require more back-and-forth
+
+6. **Less Work for Clients**
+   - In DSA implementations, Owl requires fewer computations on the client side than OPAQUE
+
+### Advantages over Traditional Password Authentication (OAuth, etc.)
+
+Traditional authentication systems like OAuth use symmetric approaches where both client and server know the password (or its hash). Owl's augmented approach provides important security benefits:
+
+1. **Server Breaches Don't Expose Passwords**
+   - In traditional systems, stolen credentials let attackers impersonate users immediately
+   - With Owl, attackers must perform expensive offline cracking for each password
+   - No need for hardware security modules or distributed servers
+
+2. **One-Way Password Storage**
+   - The server only stores a cryptographic transformation of the password
+   - Recovery requires brute-force guessing through possible passwords
+
+3. **More Efficient Than Similar Protocols**
+   - Owl provides better security than symmetric PAKE protocols like J-PAKE
+   - But uses less computation overall
+
+4. **Protection for Old Sessions**
+   - Even if an attacker learns your password later, they can't decrypt past session keys
+   - Your previous communications stay secure
+
 ## Documentation
 
 For detailed information about the protocol and API:
 
 - **[API Reference](api_reference.md)** - Complete API documentation for all classes and methods
 - **[Protocol Flow](flow.md)** - Mathematical details and cryptographic flow of the Owl protocol
+
 ## Quick Start
 
 ### Basic Setup
@@ -66,10 +120,7 @@ The possible values of `Curves` are:
 - `Curves.P256` - NIST P-256 curve (recommended for most uses)
 - `Curves.P384` - NIST P-384 curve (higher security)
 - `Curves.P521` - NIST P-521 curve (maximum security)
-
-
-
-
+- `Curves.FOURQ` - FourQ curve (high performance, experimental)
 
 ## Message Types
 
@@ -83,8 +134,6 @@ The Owl protocol uses structured messages for communication between client and s
 - **`AuthInitialValues`** - Temporary values from `OwlServer.authInit()`, stored in session and used by `OwlServer.authFinish()`. Can be deleted after authentication completes
 - **`AuthInitResponse`** - Contains values from `OwlServer.authInit()`, used by `OwlClient.authFinish()`
 - **`AuthFinishRequest`** - Contains values from `OwlClient.authFinish()`, used by `OwlServer.authFinish()`
-
-
 
 ##  Exception Types
 
@@ -120,7 +169,7 @@ Both parties derive the same shared key without ever transmitting the password o
 
 ##  Complete Example
 
-See the `examples/` directory for complete working examples:
+Complete example:
 
 ```python
 import asyncio
@@ -321,7 +370,8 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
-
+## Tests
+there is Tests.py which can run some tests (needs to be improved)
 ##  Contributing
 
 Contributions are welcome! Please:
@@ -338,14 +388,14 @@ This project is released under the MIT License. See the [LICENSE](LICENSE) file 
 
 ##  Acknowledgments
 
-- Based on the [Owl paper](https://eprint.iacr.org/2023/768.pdf) by Jarecki et al.
+- Based on the [Owl paper](https://eprint.iacr.org/2023/768.pdf) by Feng Hao, Samiran Bag, Liqun Chen, and Paul C. van Oorschot
 - Inspired by the TypeScript implementation [owl-ts](https://github.com/henry50/owl-ts)
 
 ##  References
 
-- [Owl: Compositional Verification of Security Protocols via an Information-Flow Type System](https://eprint.iacr.org/2023/768.pdf)
+- [Owl: An Augmented Password-Authenticated Key Exchange Scheme](https://eprint.iacr.org/2023/768.pdf)
 - [NIST Elliptic Curves](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-4.pdf)
 
 ---
 
-**Made with ❤️ in Python**
+**Owls have asymmetrical ears, which give them a natural advantage in locating the source of sound in darkness** -Feng Hao
