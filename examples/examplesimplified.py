@@ -1,78 +1,58 @@
 import asyncio
-from owl_crypto_py import (  OwlClient,    OwlServer,    Config,    Curves,   AuthInitRequest,   AuthFinishRequest,   ZKPVerificationFailure,    AuthenticationFailure,)
-
+from owl_crypto_py import (OwlClient, OwlServer, Config, Curves,AuthInitRequest,AuthFinishRequest,ZKPVerificationFailure,AuthenticationFailure,)
 async def main():
     # Setup
     config = Config(curve=Curves.P256, serverId="example.com")
-    server = OwlServer(config)
-    # Simulated databases
+    server = OwlServer(config)  
+    # Simulated database
     db_credentials = {}
     db_sessions = {} 
-    # User credentials
-    username = "alice"
-    password = "secure_password_123" 
     # REGISTRATION
-    print("Registering user...")
+    print("=== Registration ===")
     client = OwlClient(config)
+    username = "alice"
+    password = "secure_password_123"
+    
     reg_request = await client.register(username, password)
     credentials = await server.register(reg_request)
     db_credentials[username] = credentials
-    print(f" User '{username}' registered\n")
-    
+    print(f" User registered\n") 
+    # Helper function for authentication
+    async def authenticate(user, pwd, session_key):
+        client = OwlClient(config)
+        
+        async def send_init(json_data):
+            req = AuthInitRequest.deserialize(json_data, config)
+            result = await server.authInit(user, req, db_credentials[user])
+            if isinstance(result, ZKPVerificationFailure):
+                return None
+            db_sessions[session_key] = result.initial
+            return result.response.to_json()
+        
+        async def send_finish(json_data):
+            req = AuthFinishRequest.deserialize(json_data, config)
+            result = await server.authFinish(user, req, db_sessions[session_key])
+            if isinstance(result, (ZKPVerificationFailure, AuthenticationFailure)):
+                return None
+            return "OK"
+        
+        return await client.login(user, pwd, send_init, send_finish)
     # LOGIN WITH CORRECT PASSWORD
-    print("Logging in with correct password...")
-    client = OwlClient(config)
+    print("=== Login (correct password) ===")
+    result = await authenticate(username, password, "session_1")
     
-    auth_init = await client.authInit(username, password)
-    
-    init_result = await server.authInit(
-        username, 
-        AuthInitRequest.deserialize(auth_init.to_json(), config),
-        db_credentials[username]
-    )
-    db_sessions[username] = init_result.initial
-    
-    finish_result = await client.authFinish(init_result.response)
-     
-    server_result = await server.authFinish(
-        username,
-        AuthFinishRequest.deserialize(finish_result.finishRequest.to_json(), config),
-        db_sessions[username]
-    )
-    
-    if not isinstance(server_result, (ZKPVerificationFailure, AuthenticationFailure)):
-        print(f" Login successful!")
-        print(f" Shared key: {finish_result.key.hex()[:32]}...\n")
+    if result.success:
+        print(f" Success! Key: {result.key.hex()[:32]}...\n")
     else:
-        print(" Login failed\n")
-    
+        print(f" Failed: {result.error}\n") 
     # LOGIN WITH WRONG PASSWORD
-    print("Logging in with wrong password...")
-    client2 = OwlClient(config)
-    wrong_password = "wrong_password_456"
-
-    auth_init_wrong = await client2.authInit(username, wrong_password)
+    print("=== Login (wrong password) ===")
+    result = await authenticate(username, "wrong_password", "session_2")
     
-    init_result_wrong = await server.authInit(
-        username, 
-        AuthInitRequest.deserialize(auth_init_wrong.to_json(), config),
-        db_credentials[username]
-    )
-    db_sessions[username + "_wrong"] = init_result_wrong.initial
-
-    finish_result_wrong = await client2.authFinish(init_result_wrong.response)
-    
-    server_result_wrong = await server.authFinish(
-        username,
-        AuthFinishRequest.deserialize(finish_result_wrong.finishRequest.to_json(), config),
-        db_sessions[username + "_wrong"]
-    )
-    
-    if not isinstance(server_result_wrong, (ZKPVerificationFailure, AuthenticationFailure)):
-        print(f" Login successful!")
-        print(f" Shared key: {finish_result_wrong.key.hex()[:32]}...")
+    if result.success:
+        print(f" Success! Key: {result.key.hex()[:32]}...")
     else:
-        print(" Login failed - Authentication rejected")
+        print(f" Failed: {result.error}")
 
 
 if __name__ == "__main__":
