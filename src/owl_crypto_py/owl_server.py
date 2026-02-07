@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 from typing import Union, Callable, Awaitable, Optional
 from dataclasses import dataclass
@@ -155,7 +156,21 @@ class OwlServer(OwlCommon):
         
         return AuthFinishResult(key=k, kc=kc, kcTest=kcTest)
 
-    # Simplified wrapper methods
+
+    def register_sync(self, request: RegistrationRequest) -> UserCredentials:
+        return asyncio.run(self.register(request))
+
+    def authInit_sync(
+        self, username: str, request: AuthInitRequest, credentials: UserCredentials
+    ) -> Union[AuthInitResult, ZKPVerificationFailure]:
+        return asyncio.run(self.authInit(username, request, credentials))
+
+    def authFinish_sync(
+        self, username: str, request: AuthFinishRequest, initial: AuthInitialValues
+    ) -> Union[AuthFinishResult, AuthenticationFailure, ZKPVerificationFailure]:
+        return asyncio.run(self.authFinish(username, request, initial))
+
+
     async def handleAuth(
         self,
         username: str,

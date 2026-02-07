@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 from typing import Optional, Union, Callable, Awaitable
@@ -181,6 +182,9 @@ class OwlClient(OwlCommon):
         kc = await self.HMAC(K, username, self.serverId, X1, X2, X3, X4)
         kcTest = await self.HMAC(K, self.serverId, username, X3, X4, X1, X2)
 
+        # clear secret values from memory
+        self.initValues = None
+
         return AuthFinishResult(
             finishRequest=AuthFinishRequest(alpha, PIAlpha, r),
             key=k,
@@ -188,7 +192,20 @@ class OwlClient(OwlCommon):
             kcTest=kcTest,
         )
 
-    # Simplified wrapper method
+    def register_sync(self, username: str, password: str) -> RegistrationRequest:
+        """Synchronous wrapper for register()."""
+        return asyncio.run(self.register(username, password))
+
+    def authInit_sync(self, username: str, password: str) -> AuthInitRequest:
+        """Synchronous wrapper for authInit()."""
+        return asyncio.run(self.authInit(username, password))
+
+    def authFinish_sync(
+        self, response: AuthInitResponse
+    ) -> Union[AuthFinishResult, ZKPVerificationFailure, UninitialisedClientError]:
+        """Synchronous wrapper for authFinish()."""
+        return asyncio.run(self.authFinish(response))
+
     async def login(
         self,
         username: str,

@@ -3,6 +3,7 @@ from .owl_server import *
 from .owl_common import (
     Config,
     Curves,
+    OwlCommon,
     ZKPVerificationFailure,
     AuthenticationFailure,
 )
@@ -21,6 +22,7 @@ __all__ = [
     
     'Config',
     'Curves',
+    'OwlCommon',
     'ZKPVerificationFailure',
     'AuthenticationFailure',
     

@@ -314,6 +314,10 @@ class OwlCommon(ABC):
         r = self.modN(v - x * h)
         return ZKP(h=h, r=r)
     
+    @staticmethod
+    def verifyKeyConfirmation(my_kc_test: str, received_kc: str) -> bool:
+        return hmac.compare_digest(my_kc_test.encode(), received_kc.encode())
+
     async def verifyZKP(self, zkp: ZKP, G: Union[Point, FourQPoint], X: Union[Point, FourQPoint], prover: str) -> bool:
         h = zkp.h
         r = zkp.r
