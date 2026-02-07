@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "owl-crypto-py"
-version = "1.1.1"
+version = "1.1.2"
 description = "Python implementation of the OWL aPAKE protocol"
 readme = "README.md"
 license = { text = "MIT" }
