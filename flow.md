@@ -8,7 +8,7 @@ Owl is an augmented PAKE (Password-Authenticated Key Exchange) protocol that all
 ## 1. Initial Setup
 
 ### System Parameters
-- **Group**: Elliptic curve (P-256, P-384, or P-521)
+- **Group**: Elliptic curve (P-256, P-384, P-521, or FourQ)
 - **G**: Curve generator
 - **n**: Group order (prime)
 - **H**: SHA-256 hash function
@@ -54,10 +54,10 @@ async def register(self, username: str, password: str) -> RegistrationRequest:
     # t = H(U||w) mod n
     t = self.modN(await self.H(username + password))
     
-    # π = H(t) mod n
+    # π = H(t) mod n  (must be non-zero)
     pi = self.modN(await self.H(t))
-    
-    # T = G * t
+    if pi == 0:
+        raise ValueError("pi must not be zero")
     T = self.G.multiply(t)
     
     return RegistrationRequest(pi, T)
@@ -109,8 +109,10 @@ async def authInit(self, username: str, password: str) -> AuthInitRequest:
     # t = H(U||w) mod n
     t = self.modN(await self.H(username + password))
     
-    # π = H(t) mod n
+    # π = H(t) mod n  (must be non-zero)
     pi = self.modN(await self.H(t))
+    if pi == 0:
+        raise ValueError("pi must not be zero")
     
     # x₁ ∈ R [1, n-1]
     x1 = self.rand(1, self.n - 1)
@@ -144,7 +146,7 @@ async def authInit(self, username: str, password: str) -> AuthInitRequest:
 ```
 Server:
     Verifies Π₁, Π₂
-    Verifies X₂ ≠ 1
+    Verifies X₂ != 1 (identity element check)
     
     x₄ ∈ R [1, n-1]
     X₄ = G * x₄
@@ -183,6 +185,10 @@ async def authInit(
     ):
         return ZKPVerificationFailure()
     
+    # Check X₂ != identity element
+    if hasattr(X2, 'is_infinity') and X2.is_infinity:
+        return ZKPVerificationFailure()
+    
     # x₄ ∈ R [1, n-1]
     x4 = self.rand(1, self.n - 1)
     
@@ -205,7 +211,10 @@ async def authInit(
     PIBeta = await self.createZKP(secret, betaG, beta, self.serverId)
     
     response = AuthInitResponse(X3, X4, PI3, PI4, beta, PIBeta)
-    initial = AuthInitialValues(T, pi, x4, X1, X2, X3, X4, beta, PI1, PI2, PI3, PIBeta)
+    initial = AuthInitialValues(
+        T, pi, x4, X1, X2, X3, X4, beta,
+        PI1, PI2, PI3, PI4, PIBeta
+    )
     
     return AuthInitResult(response=response, initial=initial)
 ```
@@ -218,7 +227,7 @@ async def authInit(
 ```
 Client:
     Verifies Π₃, Π₄, Π_β
-    Verifies X₄ ≠ 1
+    Verifies X₄ ≠ 1 (identity element check)
     
     secret = x₂ * π mod n
     alphaG = X₁ + X₃ + X₄
@@ -226,7 +235,7 @@ Client:
     Π_α = ZKP{x₂ · π}
     
     K = (β - X₄^(x₂·π)) * x₂
-    h = H(K || Transcript)
+    h = H(K || Transcript)    <- includes Π₄ (h, r)
     r = x₁ - t·h mod n
     
     → Sends (α, Π_α, r)
@@ -261,6 +270,10 @@ async def authFinish(
         or not await self.verifyZKP(PI4, self.G, X4, self.serverId)
         or not await self.verifyZKP(PIBeta, betaG, beta, self.serverId)
     ):
+        return ZKPVerificationFailure()
+    
+    # Check X₄ != identity element
+    if hasattr(X4, 'is_infinity') and X4.is_infinity:
         return ZKPVerificationFailure()
     
     # secret = x₂ * π mod n
@@ -342,6 +355,7 @@ async def authFinish(
     PI1 = initial.PI1
     PI2 = initial.PI2
     PI3 = initial.PI3
+    PI4 = initial.PI4
     PIBeta = initial.PIBeta
     
     alpha = request.alpha
@@ -356,10 +370,11 @@ async def authFinish(
     # K = (α - X₂^(x₄·π)) * x₄
     K = alpha.subtract(X2.multiply(self.modN(x4 * pi))).multiply(x4)
     
-    # h = H(K || Transcript)
+    # h = H(K||Transcript)  - includes PI4 in transcript
     h = await self.H(
         K, username, X1, X2, PI1.h, PI1.r, PI2.h, PI2.r,
-        self.serverId, X3, X4, PI3.h, PI3.r, beta, PIBeta.h, PIBeta.r,
+        self.serverId, X3, X4, PI3.h, PI3.r, PI4.h, PI4.r,
+        beta, PIBeta.h, PIBeta.r,
         alpha, PIAlpha.h, PIAlpha.r
     )
     
@@ -491,7 +506,20 @@ K = (α - X₂^(x₄·π)) · x₄
 
 ### 5. **Key Confirmation**
 - `kc` and `kcTest` ensure both parties have the same key
-- Prevents unknown key-share attacks
+- Compared using constant-time `hmac.compare_digest` via `OwlCommon.verifyKeyConfirmation()`
+- Prevents unknown key-share attacks and timing side-channels
+
+### 6. **Identity Element Checks**
+- Server rejects X₂ = 1 (point at infinity) to prevent small-subgroup attacks
+- Client rejects X₄ = 1 for the same reason
+
+### 7. **Non-Zero Verifier**
+- π ≠ 0 is enforced during registration and authentication
+- Prevents degenerate protocol states
+
+### 8. **Secret Cleanup**
+- Ephemeral secrets (`initValues`) are cleared from the client after `authFinish`
+- Uses `secrets.randbelow()` for unbiased random number generation
 
 ---
 
@@ -502,7 +530,7 @@ K = (α - X₂^(x₄·π)) · x₄
 │ REGISTRATION                                                     │
 ├─────────────────────────────────────────────────────────────────┤
 │ Client: register(username, password)                            │
-│   → t = H(U||w), π = H(t), T = G*t                             │
+│   → t = H(U||w), π = H(t) [π != 0], T = G*t                      │
 │   → Sends (π, T)                                                │
 │                                                                  │
 │ Server: register(RegistrationRequest)                           │
@@ -525,7 +553,7 @@ K = (α - X₂^(x₄·π)) · x₄
 │ LOGIN - FLOW 2                                                   │
 ├─────────────────────────────────────────────────────────────────┤
 │ Server: authInit(AuthInitRequest, UserCredentials)             │
-│   → Verifies Π₁, Π₂                                             │
+│   → Verifies Π₁, Π₂; checks X₂ ≠ 1                              │
 │   → x₄ ∈ R [1,n-1], X₄ = G*x₄, Π₄ = ZKP{x₄}                   │
 │   → β = (X₁+X₂+X₃)^(x₄·π), Π_β = ZKP{x₄·π}                    │
 │   → Sends (X₃, X₄, Π₃, Π₄, β, Π_β)                             │
@@ -535,10 +563,10 @@ K = (α - X₂^(x₄·π)) · x₄
 │ LOGIN - FLOW 3                                                   │
 ├─────────────────────────────────────────────────────────────────┤
 │ Client: authFinish(AuthInitResponse)                            │
-│   → Verifies Π₃, Π₄, Π_β                                        │
+│   → Verifies Π₃, Π₄, Π_β; checks X₄ ≠ 1                         │
 │   → α = (X₁+X₃+X₄)^(x₂·π), Π_α = ZKP{x₂·π}                    │
 │   → K = (β - X₄^(x₂·π)) * x₂                                   │
-│   → h = H(K||Transcript), r = x₁ - t·h                          │
+│   → h = H(K||Transcript incl. Π₄), r = x₁ - t·h                │
 │   → k = H(K), kc = HMAC(...)                                    │
 │   → Sends (α, Π_α, r)                                           │
 └─────────────────────────────────────────────────────────────────┘
@@ -549,10 +577,10 @@ K = (α - X₂^(x₄·π)) · x₄
 │ Server: authFinish(AuthFinishRequest, AuthInitialValues)       │
 │   → Verifies Π_α                                                │
 │   → K = (α - X₂^(x₄·π)) * x₄                                   │
-│   → h = H(K||Transcript)                                         │
+│   → h = H(K||Transcript incl. Π₄)                               │
 │   → Verifies G*r + T*h = X₁                                     │
 │   → k = H(K), kc = HMAC(...)                                    │
-│   → Compares key confirmation                                    │
+│   → Constant-time key confirmation comparison                    │
 └─────────────────────────────────────────────────────────────────┘
 
 RESULT: Both have k = H(K) = H(G^((x₁+x₃)·x₂·x₄·π))

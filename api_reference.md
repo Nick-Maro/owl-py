@@ -15,7 +15,7 @@ Config(curve: Curves, serverId: str)
 ```
 
 **Parameters:**
-- `curve` - Elliptic curve to use (P256, P384, or P521)
+- `curve` - Elliptic curve to use (P256, P384, P521, or FOURQ)
 - `serverId` - Unique identifier for the server
 
 **Example:**
@@ -33,7 +33,7 @@ Generate registration request without transmitting the password.
 
 **Process:**
 1. Computes `t = H(username || password) mod n`
-2. Derives password verifier `pi = H(t) mod n`
+2. Derives password verifier `pi = H(t) mod n` (raises `ValueError` if `pi == 0`)
 3. Creates public commitment `T = G * t`
 
 **Returns:** `RegistrationRequest(pi, T)` to send to server
@@ -71,9 +71,12 @@ Complete authentication and derive shared session key.
 
 **Process:**
 1. Verifies server's Zero-Knowledge Proofs
-2. Computes shared secret point: `K = (beta - X4*(x2*pi)) * x2`
-3. Derives session key: `k = H(K)`
-4. Generates proof of password knowledge: `r = x1 - (t * h) mod n`
+2. Verifies X₄ ≠ identity element
+3. Computes shared secret point: `K = (beta - X4*(x2*pi)) * x2`
+4. Derives session key: `k = H(K)`
+5. Includes Π₄ in transcript hash for full protocol compliance
+6. Generates proof of password knowledge: `r = x1 - (t * h) mod n`
+7. Clears ephemeral secrets from memory after computation
 
 **Returns:** 
 - `finishRequest` - Final message to send to server
@@ -85,6 +88,18 @@ Complete authentication and derive shared session key.
 result = await client.authFinish(server_response)
 session_key = result.key  # Use this for encryption
 ```
+
+---
+
+### Synchronous Client Wrappers
+
+```python
+client.register_sync(username, password)   # RegistrationRequest
+client.authInit_sync(username, password)    #  AuthInitRequest
+client.authFinish_sync(response)            # AuthFinishResult
+```
+
+Convenience methods that call `asyncio.run()` internally. Use when running outside an async context.
 
 ---
 
@@ -116,9 +131,10 @@ Process authentication initialization with ZKP verification.
 
 **Process:**
 1. Verifies client's ZKPs (PI1, PI2)
-2. Generates ephemeral secret `x4`
-3. Computes shared component: `beta = (X1+X2+X3) * (pi*x4)`
-4. Creates ZKPs for `X4` and `beta`
+2. Verifies X₂ ≠ identity element
+3. Generates ephemeral secret `x4`
+4. Computes shared component: `beta = (X1+X2+X3) * (pi*x4)`
+5. Creates ZKPs for `X4` and `beta`
 
 **Returns:**
 - `response` - Message to send to client
@@ -153,6 +169,42 @@ result = await server.authFinish(username, client_request, initial)
 if isinstance(result, AuthenticationFailure):
     return "Invalid password"
 session_key = result.key
+```
+
+---
+
+### Synchronous Server Wrappers
+
+```python
+server.register_sync(request)                              # UserCredentials
+server.authInit_sync(username, request, credentials)       # AuthInitResult | ZKPVerificationFailure
+server.authFinish_sync(username, request, initial)         # AuthFinishResult | AuthenticationFailure | ZKPVerificationFailure
+```
+
+Convenience methods that call `asyncio.run()` internally.
+
+---
+
+## OwlCommon
+
+### `OwlCommon.verifyKeyConfirmation(my_kc_test: str, received_kc: str) -> bool`
+
+Constant-time comparison of key confirmation values using `hmac.compare_digest`. Prevents timing side-channel attacks.
+
+**Parameters:**
+- `my_kc_test` - The expected key confirmation string computed locally
+- `received_kc` - The key confirmation string received from the other party
+
+**Returns:** `True` if the values match
+
+**Example:**
+```python
+from owl_crypto_py import OwlCommon
+
+client_ok = OwlCommon.verifyKeyConfirmation(client_result.kcTest, server_result.kc)
+server_ok = OwlCommon.verifyKeyConfirmation(server_result.kcTest, client_result.kc)
+if client_ok and server_ok:
+    print("Mutual authentication confirmed")
 ```
 
 ---

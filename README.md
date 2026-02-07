@@ -31,6 +31,9 @@ pip install cryptography
 - **Server Compromise Resistance**: Even if the server is compromised, passwords remain secure
 - **Forward Secrecy**: Session keys cannot be recovered even if passwords are later compromised
 - **Elliptic Curves**: Supports P-256, P-384, P-521, and FourQ (experimental). Implementation of Curve25519 is in progress. could work on secp256k1 too
+- **Constant-Time Key Confirmation**: Uses `hmac.compare_digest` to prevent timing attacks
+- **Synchronous API**: Sync wrappers (`register_sync`, `authInit_sync`, `authFinish_sync`) for non-async contexts
+- **Secret Cleanup**: Ephemeral secrets are cleared from memory after use
 
 ## Why Owl?
 
@@ -99,6 +102,7 @@ For detailed information about the protocol and API:
 from owl_crypto_py import (
     OwlClient, 
     OwlServer, 
+    OwlCommon,
     Config, 
     Curves
 )
@@ -121,6 +125,25 @@ The possible values of `Curves` are:
 - `Curves.P384` - NIST P-384 curve (higher security)
 - `Curves.P521` - NIST P-521 curve (maximum security)
 - `Curves.FOURQ` - FourQ curve (high performance, experimental)
+
+## Synchronous API
+
+If you don't need `async`/`await`, every method has a `_sync` variant:
+
+```python
+client = OwlClient(config)
+server = OwlServer(config)
+
+# Registration
+reg_request = client.register_sync("alice", "password123")
+credentials = server.register_sync(reg_request)
+
+# Authentication
+auth_request = client.authInit_sync("alice", "password123")
+result = server.authInit_sync("alice", auth_request, credentials)
+finish = client.authFinish_sync(result.response)
+server_result = server.authFinish_sync("alice", finish.finishRequest, result.initial)
+```
 
 ## Message Types
 
@@ -148,6 +171,18 @@ from owl_crypto_py import (
 )
 ```
 
+### Key Confirmation Helper
+
+Use `OwlCommon.verifyKeyConfirmation()` for constant-time comparison of key confirmation values (prevents timing attacks):
+
+```python
+from owl_crypto_py import OwlCommon
+
+# After both sides complete authentication:
+if OwlCommon.verifyKeyConfirmation(client_kcTest, server_kc):
+    print("Key confirmation passed")
+```
+
 ##  Architecture
 
 The protocol follows a three-message authentication flow:
@@ -166,6 +201,8 @@ Both parties derive the same shared key without ever transmitting the password o
 - **Forward Secrecy**: Past session keys remain secure even if password is compromised
 - **Mutual Authentication**: Both client and server authenticate each other
 - **Active Attack Protection**: Zero-knowledge proofs prevent man-in-the-middle attacks
+- **Identity Element Checks**: Rejects X₂ = 1 (server) and X₄ = 1 (client) to prevent small-subgroup attacks
+- **Non-Zero π Validation**: Ensures the password verifier π != 0 mod n
 
 ##  Complete Example
 
@@ -176,6 +213,7 @@ import asyncio
 from owl_crypto_py import (
     OwlClient,
     OwlServer,
+    OwlCommon,
     Config,
     Curves,
     RegistrationRequest,
@@ -328,7 +366,9 @@ async def authentication_flow(credentials_from_db):
     server_kcTest = server_finish_result.kcTest
     
     print(f"\nVerifying key confirmation...")
-    if client_kcTest == server_kc and server_kcTest == client_kc:
+    # Use constant-time comparison to prevent timing attacks
+    if (OwlCommon.verifyKeyConfirmation(client_kcTest, server_kc)
+            and OwlCommon.verifyKeyConfirmation(server_kcTest, client_kc)):
         print(" Key confirmation successful!")
         print(f" Authentication successful for '{username}'!")
         print(f"\nShared key established:")
@@ -371,7 +411,16 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 ## Tests
-there is Tests.py which can run some tests (needs to be improved)
+
+Run the test suite:
+
+```bash
+python tests.py
+```
+
+Tests cover all four supported curves (P-256, P-384, P-521, FourQ) with both successful authentication and wrong-password rejection cases (8 tests total).
+
+A comprehensive example covering the full async flow, sync API, serialization round-trips, and wrong-password handling is in `examples/example_full.py`.
 ##  Contributing
 
 Contributions are welcome! Please:
