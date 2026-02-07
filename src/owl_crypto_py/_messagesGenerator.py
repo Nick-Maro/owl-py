@@ -32,6 +32,7 @@ message_specs = {
         "PI1": "ZKP",
         "PI2": "ZKP",
         "PI3": "ZKP",
+        "PI4": "ZKP",
         "PIBeta": "ZKP",
     },
     "AuthInitResponse": {
@@ -80,12 +81,15 @@ def get_curve(curve: Curves):
 
 
 def parse_num(x: Any) -> Union[int, None]:
-    """Parse a number from hex string"""
+    """Parse a number from hex string or int"""
     try:
-        if isinstance(x, str):
-            return int(x, 16)
-        elif isinstance(x, int):
+        if isinstance(x, int):
             return x
+        if isinstance(x, str):
+            x = x.strip()
+            if x.startswith('0x') or x.startswith('0X'):
+                return int(x, 16)
+            return int(x, 16)
         return None
     except (ValueError, TypeError):
         return None

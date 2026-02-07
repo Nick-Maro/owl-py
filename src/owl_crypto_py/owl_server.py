@@ -73,6 +73,10 @@ class OwlServer(OwlCommon):
         ):
             return ZKPVerificationFailure()
         
+        # check X2 != identity 
+        if hasattr(X2, 'is_infinity') and X2.is_infinity:
+            return ZKPVerificationFailure()
+        
         # x4 = [1, n-1]
         x4 = self.rand(1, self.n - 1)
         # X4 = G * x4
@@ -91,7 +95,7 @@ class OwlServer(OwlCommon):
         response = AuthInitResponse(X3, X4, PI3, PI4, beta, PIBeta)
         initial = AuthInitialValues(
             T, pi, x4, X1, X2, X3, X4, beta,
-            PI1, PI2, PI3, PIBeta
+            PI1, PI2, PI3, PI4, PIBeta
         )
         
         return AuthInitResult(response=response, initial=initial)
@@ -113,6 +117,7 @@ class OwlServer(OwlCommon):
         PI1 = initial.PI1
         PI2 = initial.PI2
         PI3 = initial.PI3
+        PI4 = initial.PI4
         PIBeta = initial.PIBeta
         
         alpha = request.alpha
@@ -130,7 +135,8 @@ class OwlServer(OwlCommon):
         # h = H(K||Transcript)
         h = await self.H(
             K, username, X1, X2, PI1.h, PI1.r, PI2.h, PI2.r,
-            self.serverId, X3, X4, PI3.h, PI3.r, beta, PIBeta.h, PIBeta.r,
+            self.serverId, X3, X4, PI3.h, PI3.r, PI4.h, PI4.r,
+            beta, PIBeta.h, PIBeta.r,
             alpha, PIAlpha.h, PIAlpha.r
         )
         

@@ -53,7 +53,6 @@ class OwlClient(OwlCommon):
     def __init__(self, config, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
         self.initValues: Optional[ClientInitVals] = None
-        self._config = config
 
     async def register(
         self, username: str, password: str
@@ -62,6 +61,9 @@ class OwlClient(OwlCommon):
         t = self.modN(await self.H(username + password))
         # pi = H(t) mod n
         pi = self.modN(await self.H(t))
+        # paper requires pi != 0 mod q
+        if pi == 0:
+            raise ValueError("pi must not be 0 mod q; choose a different password")
         # T = g * t
         T = self.G.multiply(t)
         return RegistrationRequest(pi, T)
@@ -73,6 +75,9 @@ class OwlClient(OwlCommon):
         t = self.modN(await self.H(username + password))
         # pi = H(t) mod n
         pi = self.modN(await self.H(t))
+        # paper requires pi != 0 mod q
+        if pi == 0:
+            raise ValueError("pi must not be 0 mod q; choose a different password")
         # x1 = [1, n-1]
         x1 = self.rand(1, self.n - 1)
         # x2 = [1, n-1]
@@ -132,6 +137,10 @@ class OwlClient(OwlCommon):
         ):
             return ZKPVerificationFailure()
 
+        # check X4 != identity
+        if hasattr(X4, 'is_infinity') and X4.is_infinity:
+            return ZKPVerificationFailure()
+
         secret = self.modN(x2 * pi)
         alphaG = X1.add(X3).add(X4)
         # alpha = (X1+X3+X4)*(x2 * pi)
@@ -155,6 +164,8 @@ class OwlClient(OwlCommon):
             X4,
             PI3.h,
             PI3.r,
+            PI4.h,
+            PI4.r,
             beta,
             PIBeta.h,
             PIBeta.r,
@@ -196,7 +207,7 @@ class OwlClient(OwlCommon):
                 return LoginResult(success=False, error="Failed to receive server response")
             
             
-            auth_init_response = AuthInitResponse.deserialize(response_json, self._config)
+            auth_init_response = AuthInitResponse.deserialize(response_json, self.config)
             if hasattr(auth_init_response, '__class__') and auth_init_response.__class__.__name__ == 'DeserializationError':
                 return LoginResult(success=False, error="Failed to deserialize server response")
             

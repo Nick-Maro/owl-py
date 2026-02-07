@@ -214,6 +214,7 @@ class Config:
 
 class OwlCommon(ABC):
     def __init__(self, config: Config):
+        self.config = config
         curve = config.curve
         self.serverId = config.serverId
         
@@ -250,11 +251,8 @@ class OwlCommon(ABC):
         return ((x % self.n) + self.n) % self.n
     
     def rand(self, from_val: int, to_val: int) -> int:
-        range_val = to_val - from_val
-        bytes_needed = (range_val.bit_length() + 7) // 8
-        rand_bytes = secrets.token_bytes(bytes_needed)
-        rand_val = int.from_bytes(rand_bytes, byteorder='big')
-        return from_val + (rand_val % (range_val + 1))
+        range_val = to_val - from_val + 1
+        return from_val + secrets.randbelow(range_val)
     
     def concatToBytes(self, *args: Union[bytes, str, int, Point, FourQPoint]) -> bytes:
         result = b''

@@ -6,6 +6,7 @@ from typing import Union, Any, Dict
 from dataclasses import dataclass
 
 from .owl_common import Config, Curves, Point, ZKP
+from .extended_curves import FourQPoint
 
 
 def get_curve(curve: Curves):
@@ -23,16 +24,26 @@ def get_curve(curve: Curves):
 def parse_num(x: Any) -> Union[int, None]:
     
     try:
-        return int(f"0x{x}", 16)
+        if isinstance(x, int):
+            return x
+        if isinstance(x, str):
+            x = x.strip()
+            if x.startswith('0x') or x.startswith('0X'):
+                return int(x, 16)
+            return int(x, 16)
+        return None
     except (ValueError, TypeError):
         return None
 
 
-def parse_point(x: Any, curve: Curves) -> Union[Point, None]:
+def parse_point(x: Any, curve: Curves) -> Union[Point, FourQPoint, None]:
     
     try:
-        curve_obj = get_curve(curve)
-        return Point.from_hex(x, curve_obj)
+        if curve == Curves.FOURQ:
+            return FourQPoint.from_hex(x)
+        else:
+            curve_obj = get_curve(curve)
+            return Point.from_hex(x, curve_obj)
     except Exception:
         return None
 
@@ -206,6 +217,7 @@ class AuthInitialValues:
     PI1: ZKP
     PI2: ZKP
     PI3: ZKP
+    PI4: ZKP
     PIBeta: ZKP
 
     @classmethod
@@ -234,15 +246,18 @@ class AuthInitialValues:
             PI1 = parse_zkp(x.get('PI1'))
             PI2 = parse_zkp(x.get('PI2'))
             PI3 = parse_zkp(x.get('PI3'))
+            PI4 = parse_zkp(x.get('PI4'))
             PIBeta = parse_zkp(x.get('PIBeta'))
             
             if (T is not None and pi is not None and x4 is not None and
                 X1 is not None and X2 is not None and X3 is not None and
                 X4 is not None and beta is not None and PI1 is not None and
-                PI2 is not None and PI3 is not None and PIBeta is not None):
+                PI2 is not None and PI3 is not None and PI4 is not None and
+                PIBeta is not None):
                 return cls(
                     T=T, pi=pi, x4=x4, X1=X1, X2=X2, X3=X3, X4=X4,
-                    beta=beta, PI1=PI1, PI2=PI2, PI3=PI3, PIBeta=PIBeta
+                    beta=beta, PI1=PI1, PI2=PI2, PI3=PI3, PI4=PI4,
+                    PIBeta=PIBeta
                 )
         
         return DeserializationError(
@@ -263,6 +278,7 @@ class AuthInitialValues:
             "PI1": {"h": format(self.PI1.h, 'x'), "r": format(self.PI1.r, 'x')},
             "PI2": {"h": format(self.PI2.h, 'x'), "r": format(self.PI2.r, 'x')},
             "PI3": {"h": format(self.PI3.h, 'x'), "r": format(self.PI3.r, 'x')},
+            "PI4": {"h": format(self.PI4.h, 'x'), "r": format(self.PI4.r, 'x')},
             "PIBeta": {"h": format(self.PIBeta.h, 'x'), "r": format(self.PIBeta.r, 'x')},
         }
     
