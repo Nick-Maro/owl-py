@@ -14,6 +14,9 @@ from .extended_curves import FourQPoint, rand_scalar_fourq
 
 
 class Point:
+    #Represents a point on a NIST prime elliptic curve (P-256, P-384, P-521).
+    #Supports addition, doubling, scalar multiplication (via Montgomery
+    #ladder), and serialization to/from hex.
     
     def __init__(self, x: int, y: int, curve, is_infinity=False):
         self.x = x
@@ -74,16 +77,18 @@ class Point:
         if self.is_infinity or scalar == 0:
             return Point.infinity(self.curve)
         
-        result = Point.infinity(self.curve)
-        addend = self
+        R0 = Point.infinity(self.curve)
+        R1 = Point(self.x, self.y, self.curve)
         
-        while scalar:
-            if scalar & 1:
-                result = result.add(addend)
-            addend = addend.double()
-            scalar >>= 1
+        for i in range(scalar.bit_length() - 1, -1, -1):
+            if (scalar >> i) & 1:
+                R0 = R0.add(R1)
+                R1 = R1.double()
+            else:
+                R1 = R0.add(R1)
+                R0 = R0.double()
         
-        return result
+        return R0
     
     def add(self, other: 'Point') -> 'Point':
         if self.is_infinity:

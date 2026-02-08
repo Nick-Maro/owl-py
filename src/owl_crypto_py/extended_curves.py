@@ -175,16 +175,18 @@ class FourQPoint:
         
         scalar = scalar % self.N
         
-        result = FourQPoint.infinity()
-        addend = FourQPoint(self.x, self.y, self.z, self.ta, self.tb)
+        R0 = FourQPoint.infinity()
+        R1 = FourQPoint(self.x, self.y, self.z, self.ta, self.tb)
         
-        while scalar > 0:
-            if scalar & 1:
-                result = result.add(addend)
-            addend = addend.double()
-            scalar >>= 1
+        for i in range(scalar.bit_length() - 1, -1, -1):
+            if (scalar >> i) & 1:
+                R0 = R0.add(R1)
+                R1 = R1.double()
+            else:
+                R1 = R0.add(R1)
+                R0 = R0.double()
         
-        return result
+        return R0
     
     def subtract(self, other: 'FourQPoint') -> 'FourQPoint':
         if other.is_infinity:

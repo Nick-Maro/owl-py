@@ -41,6 +41,10 @@ class HandleAuthResult:
 
 
 class OwlServer(OwlCommon):
+    #Server-side implementation of the Owl aPAKE protocol.  
+    #Handles registration, authentication verification, and key derivation.
+    #The server never learns the user's password, it only stores a
+    #cryptographic commitment that cannot be reversed.
     async def register(self, request: RegistrationRequest) -> UserCredentials:
         pi = request.pi
         T = request.T
@@ -57,6 +61,8 @@ class OwlServer(OwlCommon):
         request: AuthInitRequest,
         credentials: UserCredentials,
     ) -> Union[AuthInitResult, ZKPVerificationFailure]:
+        if not username or not isinstance(username, str):
+            raise ValueError("username must be a non-empty string")
         X1 = request.X1
         X2 = request.X2
         PI1 = request.PI1
@@ -107,6 +113,8 @@ class OwlServer(OwlCommon):
         request: AuthFinishRequest,
         initial: AuthInitialValues,
     ) -> Union[AuthFinishResult, AuthenticationFailure, ZKPVerificationFailure]:
+        if not username or not isinstance(username, str):
+            raise ValueError("username must be a non-empty string")
         T = initial.T
         pi = initial.pi
         x4 = initial.x4

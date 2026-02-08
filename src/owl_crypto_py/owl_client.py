@@ -58,6 +58,10 @@ class OwlClient(OwlCommon):
     async def register(
         self, username: str, password: str
     ) -> RegistrationRequest:
+        if not username or not isinstance(username, str):
+            raise ValueError("username must be a non-empty string")
+        if not password or not isinstance(password, str):
+            raise ValueError("password must be a non-empty string")
         # t = H(U||w) mod n
         t = self.modN(await self.H(username + password))
         # pi = H(t) mod n
@@ -72,6 +76,10 @@ class OwlClient(OwlCommon):
     async def authInit(
         self, username: str, password: str
     ) -> AuthInitRequest:
+        if not username or not isinstance(username, str):
+            raise ValueError("username must be a non-empty string")
+        if not password or not isinstance(password, str):
+            raise ValueError("password must be a non-empty string")
         # t = H(U||w) mod n
         t = self.modN(await self.H(username + password))
         # pi = H(t) mod n
